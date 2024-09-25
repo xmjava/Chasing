@@ -1,0 +1,114 @@
+# Chasing配置文件
+
+global:
+    rss: https://bt4gprx.com/search?page=rss&q= # 搜索资源的rss站
+    proxy: http://127.0.0.1:8118 # 使用http/https代理，可选
+
+    qbittorrent: # 访问qBittorrent的设置，用于下载磁力链接，不支持https
+        host: localhost
+        port: 9080
+        username:
+        password:
+
+    aria2: # 访问Aria2的设置，用于下载磁力链接，仅支持jsonrpc方式，不支持https
+        host: localhost
+        port: 6800
+        rpc_mode: json # 没用
+        rpc_path: jsonrpc
+        secret:
+
+dramas:
+    - drama:
+          name: The Penguin # 剧名，用于搜索资源，务必填对
+          keywords: 1080p,amzn,tgx # 其它搜索关键字列表，如分辨率，发布组等
+          season: 1 # 该季是第几季，数字
+          episodes: 8 # 该季一共几集，数字
+          schedules: # 每一集的上线日期，可以不设置
+              - E01: 2024-09-19
+              - E02: 2024-09-30
+              - E03: 2024-10-07
+              - E04: 2024-10-14
+              - E05: 2024-10-21
+              - E06: 2024-10-28
+              - E07: 2024-11-04
+              - E08: 2024-11-11
+          start: 2024-09-19 # 该季首播日期
+          download: qbittorrent # 使用什么工具下载，支持qBittorrent和Aria2
+
+    - drama:
+          name: Only Murders in the Building
+          keywords: 1080p,dsnp,tgx
+          season: 4
+          episodes: 10
+          schedules: # 可选
+              - E01: 2024-08-27
+              - E02: 2024-09-03
+              - E03: 2024-09-10
+              - E04: 2024-09-17
+              - E05: 2024-09-24
+              - E06: 2024-10-01
+              - E07: 2024-10-08
+              - E08: 2024-10-15
+              - E09: 2024-10-22
+              - E10: 2024-10-29
+          start: 2024-08-27
+          download: qbittorrent
+
+    - drama:
+          name: Slow Horses
+          keywords: 1080p,atvp,tgx
+          season: 4
+          episodes: 6
+          schedules: # 可选
+              - E01: 2024-09-04
+              - E02: 2024-09-11
+              - E03: 2024-09-18
+              - E04: 2024-09-25
+              - E05: 2024-10-02
+              - E06: 2024-10-09
+          start: 2024-09-04
+          download: qbittorrent
+
+    - drama:
+          name: The Rings of Power
+          keywords: 1080p,amzn,tgx
+          season: 2
+          episodes: 8
+          schedules: # 可选
+              - E01: 2024-08-30
+              - E02: 2024-08-30
+              - E03: 2024-08-30
+              - E04: 2024-09-06
+              - E05: 2024-09-13
+              - E06: 2024-09-20
+              - E07: 2024-09-27
+              - E08: 2024-10-04
+          start: 2024-08-30
+          download: qbittorrent
+
+    - drama:
+          name: All Creatures Great and Small
+          keywords: 1080p,MY5,EZTV
+          season: 5
+          episodes: 6
+          start: 2024-09-20
+          download: qbittorrent
+
+    - drama:
+          name: Tulsa King
+          keywords: 1080p,amzn,tgx
+          season: 2
+          episodes: 10
+          schedules: # 可选
+              - E01: 2024-09-15
+              - E02: 2024-09-22
+              - E03: 2024-09-29
+              - E04: 2024-10-06
+              - E05: 2024-10-13
+              - E06: 2024-10-20
+              - E07: 2024-10-27
+              - E08: 2024-11-03
+              - E09: 2024-11-10
+              - E10: 2024-11-17
+          start: 2024-09-15
+          download: qbittorrent
