@@ -20,7 +20,7 @@ global:
 dramas:
     - drama:
           name: The Penguin # 剧名，用于搜索资源，务必填对
-          keywords: 1080p,amzn,tgx # 其它搜索关键字列表，如分辨率，发布组等
+          keywords: 1080p,amzn,tgx # 其它搜索关键字列表，如分辨率，发布组等，可选
           season: 1 # 该季是第几季，数字
           episodes: 8 # 该季一共几集，数字
           schedules: # 每一集的上线日期，可以不设置
@@ -32,7 +32,7 @@ dramas:
               - E06: 2024-10-28
               - E07: 2024-11-04
               - E08: 2024-11-11
-          start: 2024-09-19 # 该季首播日期
+          start: 2024-09-19 # 该季首播日期，可选
           download: qbittorrent # 使用什么工具下载，支持qBittorrent和Aria2
 
     - drama:
@@ -41,16 +41,7 @@ dramas:
           season: 4
           episodes: 10
           schedules: # 可选
-              - E01: 2024-08-27
-              - E02: 2024-09-03
-              - E03: 2024-09-10
-              - E04: 2024-09-17
-              - E05: 2024-09-24
-              - E06: 2024-10-01
-              - E07: 2024-10-08
-              - E08: 2024-10-15
-              - E09: 2024-10-22
-              - E10: 2024-10-29
+              - week: tue # 每周几上线，多个用逗号分割
           start: 2024-08-27
           download: qbittorrent
 
@@ -60,12 +51,7 @@ dramas:
           season: 4
           episodes: 6
           schedules: # 可选
-              - E01: 2024-09-04
-              - E02: 2024-09-11
-              - E03: 2024-09-18
-              - E04: 2024-09-25
-              - E05: 2024-10-02
-              - E06: 2024-10-09
+              - week: wed
           start: 2024-09-04
           download: qbittorrent
 
@@ -75,15 +61,7 @@ dramas:
           season: 2
           episodes: 8
           schedules: # 可选
-              - E01: 2024-08-30
-              - E02: 2024-08-30
-              - E03: 2024-08-30
-              - E04: 2024-09-06
-              - E05: 2024-09-13
-              - E06: 2024-09-20
-              - E07: 2024-09-27
-              - E08: 2024-10-04
-          start: 2024-08-30
+              - week: thu
           download: qbittorrent
 
     - drama:

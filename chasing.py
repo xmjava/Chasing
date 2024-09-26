@@ -7,7 +7,6 @@ import datetime
 from zoneinfo import ZoneInfo
 from urllib.parse import quote
 import requests
-# from xml.dom.minidom import parse
 import xml.dom.minidom
 import json
 import os
@@ -37,6 +36,8 @@ ARIA2 = "aria2"
 DOWNLOAD = "download"
 USERNAME = "username"
 PASSWORD = "password"
+WEEK = "week"
+WEEKS_DICT = {"mon" : 0, "tue" : 1, "wed" : 2, "thu" : 3, "fri" : 4, "sat" : 5, "sun" : 6}
 
 CONFIG_FILE = "chasing.yml"
 DRAMA_SEEN_FILE = "chasing.seen"
@@ -83,9 +84,10 @@ def load_config(yaml_file):
 # 执行任务
 def run_drama_task(task_data):
     print_c(f"========== Start task for drama: {task_data.get(NAME)} ==========", VERBOSE)
-    # 判断是否在上线时间内 >= start <= end
+    # 如果设置了首播时间，判断是否在首播时间后 >= start
     now_date = datetime.datetime.now().date()
-    if now_date < task_data.get(START):
+    start_date = task_data.get(START)
+    if start_date and now_date < start_date:
         print_c("This season hasn't started yet, end this task!", WARNING)
         return
 
@@ -101,17 +103,31 @@ def run_drama_task(task_data):
     current_episode_str = format_episode(current_episode)
     schedules = task_data.get(SCHEDULES)
     if schedules:
+        is_in_episode_day = False
+        is_in_episode_week = False
         for i in range(len(schedules)):
             for key, value in schedules[i].items():
                 if key == current_episode_str:
-                    if now_date < value:
-                        print_c("Not in the validity episode date, end this task!", WARNING)
-                        return
+                    if now_date >= value:
+                        print_d(f"matched schedule day: {value}")
+                        is_in_episode_day = True # 匹配到上线时间，按日期
+                elif WEEK == key:
+                    weeks = str(value).split(',')
+                    for week in weeks:
+                        if now_date.weekday() == WEEKS_DICT[week]:
+                            print_d(f"matched schedule week: {value}")
+                            is_in_episode_week = True # 匹配到上线时间，按周几
+        if is_in_episode_day == False and is_in_episode_week == False:
+            print_c("Not in the validity episode date, end this task!", WARNING)
+            return
 
     current_season_episode_str = format_season(task_data.get(SEASON)) + current_episode_str
     print_c(f"Searching magnet link for {task_data.get(NAME)} {current_season_episode_str}", VERBOSE)
     # 拼接搜索URL
-    search_url = rss_base_url + quote(task_data.get(NAME) + " " + current_season_episode_str + " " + task_data.get(KEYWORDS).replace(',', ' '))
+    keywords = task_data.get(KEYWORDS)
+    if keywords == None:
+        keywords = ""
+    search_url = rss_base_url + quote(task_data.get(NAME) + " " + current_season_episode_str + " " + keywords.replace(',', ' '))
     print_d(search_url)
     # 判断是否使用代理服务器
     proxies = None
@@ -297,23 +313,10 @@ def main():
         logger.setLevel(level = logging.INFO)
     formatter = logging.Formatter("%(asctime)s - [%(levelname)s]: %(message)s")
     formatter.converter = lambda *args: datetime.datetime.now(tz=ZoneInfo('Asia/Shanghai')).timetuple() # 处理日志时区问题
-    # stream_handler = logging.StreamHandler()
-    # stream_handler.setFormatter(formatter)
-    # logger.addHandler(stream_handler)
-    # file_handler = logging.FileHandler(full_logging_file_path)
-    # file_handler.setFormatter(formatter)
-    # logger.addHandler(file_handler)
     # 按天分割日志
     time_rotating_file_handler = handlers.TimedRotatingFileHandler(filename = full_logging_file_path, when = 'D')
     time_rotating_file_handler.setFormatter(formatter)
     logger.addHandler(time_rotating_file_handler)
-
-    # 
-    # 
-    # if __DEBUG_MODE__:
-    #     logging.basicConfig(format = logging_format, level = logging.DEBUG, filename = full_logging_file_path)
-    # else:
-    #     logging.basicConfig(format = logging_format, level = logging.INFO, filename = full_logging_file_path)
 
     # 加载配置文件
     load_config(full_config_file_path)
@@ -322,9 +325,6 @@ def main():
     for i in range(len(drama_task_list)):
         drama_task_data = drama_task_list[i].get(DRAMA)
         run_drama_task(drama_task_data)
-
-    # 测试用
-    # download_thru_qbittorrent("magnet:?xt=urn:btih:5D8B7B87E18CC007A123EAF359137A7B1221AED1&dn=Only%20Murders%20in%20the%20Building%20S04E05%201080p%20WEB%20H264-SuccessfulCrab&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337&tr=udp%3A%2F%2Fopen.stealth.si%3A80%2Fannounce&tr=udp%3A%2F%2Ftracker.torrent.eu.org%3A451%2Fannounce&tr=udp%3A%2F%2Ftracker.bittor.pw%3A1337%2Fannounce&tr=udp%3A%2F%2Fpublic.popcorn-tracker.org%3A6969%2Fannounce&tr=udp%3A%2F%2Ftracker.dler.org%3A6969%2Fannounce&tr=udp%3A%2F%2Fexodus.desync.com%3A6969&tr=udp%3A%2F%2Fopen.demonii.com%3A1337%2Fannounce")
 
 if __name__ == "__main__":
     main()
