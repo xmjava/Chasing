@@ -6,7 +6,7 @@
 
 Python 3.9+
 
-需要安装第三方库：pyyaml
+需要安装第三方库：`PyYAML`，`requests`
 
 ## 部署
 
