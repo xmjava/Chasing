@@ -139,7 +139,13 @@ def run_drama_task(task_data):
         }
 
     # 搜索磁力链接
-    search_result = requests.get(search_url, headers={'User-Agent': 'Mozilla/5.0'}, proxies=proxies)
+    search_result = None
+    try:
+        search_result = requests.get(search_url, headers={'User-Agent': 'Mozilla/5.0'}, proxies=proxies)
+        search_result.raise_for_status()
+    except:
+        print_c("Network error, end this task!", ERROR)
+        return
     # 解析rss结果
     try:
         # print(search_result.text)
