@@ -13,8 +13,10 @@ import os
 import logging
 from logging import handlers
 import sys
+import time
 
 __DEBUG_MODE__ = True
+MAX_NETWORK_ERROR_RETRY_COUNT = 3 # 网络错误最多重试3次
 logger = None
 
 test_mode = False
@@ -140,12 +142,19 @@ def run_drama_task(task_data):
 
     # 搜索磁力链接
     search_result = None
-    try:
-        search_result = requests.get(search_url, headers={'User-Agent': 'Mozilla/5.0'}, proxies=proxies)
-        search_result.raise_for_status()
-    except:
-        print_c("Network error, end this task!", ERROR)
-        return
+    network_error_retry_count = 0
+    while search_result == None and network_error_retry_count < MAX_NETWORK_ERROR_RETRY_COUNT:
+        try:
+            search_result = requests.get(search_url, headers={'User-Agent': 'Mozilla/5.0'}, proxies=proxies)
+            search_result.raise_for_status()
+        except:
+            network_error_retry_count += 1
+            if network_error_retry_count >= MAX_NETWORK_ERROR_RETRY_COUNT:
+                print_c("Network error, end this task!", ERROR)
+                return
+            search_result = None
+            time.sleep(1) # 等待1秒重试
+
     # 解析rss结果
     try:
         # print(search_result.text)
@@ -320,7 +329,7 @@ def main():
     formatter = logging.Formatter("%(asctime)s - [%(levelname)s]: %(message)s")
     formatter.converter = lambda *args: datetime.datetime.now(tz=ZoneInfo('Asia/Shanghai')).timetuple() # 处理日志时区问题
     # 按天分割日志
-    time_rotating_file_handler = handlers.TimedRotatingFileHandler(filename = full_logging_file_path, when = 'D')
+    time_rotating_file_handler = handlers.TimedRotatingFileHandler(filename = full_logging_file_path, when = 'MIDNIGHT', backupCount = 7)
     time_rotating_file_handler.setFormatter(formatter)
     logger.addHandler(time_rotating_file_handler)
 
