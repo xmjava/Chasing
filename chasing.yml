@@ -3,6 +3,7 @@
 global:
     rss: https://bt4gprx.com/search?page=rss&q= # 搜索资源的rss站
     proxy: http://127.0.0.1:8118 # 使用http/https代理，可选
+    download: qbittorrent # 默认使用什么工具下载，支持qBittorrent和Aria2
 
     qbittorrent: # 访问qBittorrent的设置，用于下载磁力链接，不支持https
         host: localhost
@@ -33,7 +34,7 @@ dramas:
               - E07: 2024-11-04
               - E08: 2024-11-11
           start: 2024-09-19 # 该季首播日期，可选
-          download: qbittorrent # 使用什么工具下载，支持qBittorrent和Aria2
+          download: qbittorrent # 可选，可单独设置该任务的下载工具
 
     - drama:
           name: Only Murders in the Building
@@ -43,7 +44,6 @@ dramas:
           schedules: # 可选
               - week: tue # 每周几上线，多个用逗号分割
           start: 2024-08-27
-          download: qbittorrent
 
     - drama:
           name: Slow Horses
@@ -53,7 +53,6 @@ dramas:
           schedules: # 可选
               - week: wed
           start: 2024-09-04
-          download: qbittorrent
 
     - drama:
           name: The Rings of Power
@@ -62,7 +61,6 @@ dramas:
           episodes: 8
           schedules: # 可选
               - week: thu
-          download: qbittorrent
 
     - drama:
           name: All Creatures Great and Small
@@ -70,7 +68,6 @@ dramas:
           season: 5
           episodes: 6
           start: 2024-09-20
-          download: qbittorrent
 
     - drama:
           name: Tulsa King
@@ -89,4 +86,3 @@ dramas:
               - E09: 2024-11-10
               - E10: 2024-11-17
           start: 2024-09-15
-          download: qbittorrent

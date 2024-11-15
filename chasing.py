@@ -48,6 +48,7 @@ full_drama_seen_file_path = None
 
 rss_base_url = None
 proxy = None
+download = None
 drama_task_list = []
 qbittorrent_config = None
 aria2_config = None
@@ -68,12 +69,14 @@ def load_config(yaml_file):
 
         global rss_base_url
         global proxy
+        global download
         global drama_task_list
         global qbittorrent_config
         global aria2_config
 
         rss_base_url = data.get(GLOBAL).get(RSS)
         proxy = data.get(GLOBAL).get(PROXY)
+        download = data.get(GLOBAL).get(DOWNLOAD)
         qbittorrent_config = data.get(GLOBAL).get(QBITTORRENT)
         aria2_config = data.get(GLOBAL).get(ARIA2)
         drama_task_list = data.get(DRAMAS)
@@ -150,7 +153,7 @@ def run_drama_task(task_data):
         except:
             network_error_retry_count += 1
             if network_error_retry_count >= MAX_NETWORK_ERROR_RETRY_COUNT:
-                print_c("Network error, end this task!", ERROR)
+                print_c(f"Network error, end '{task_data.get(NAME)}' task!", ERROR)
                 return
             search_result = None
             time.sleep(1) # 等待1秒重试
@@ -218,6 +221,10 @@ def download_magnet_link(task_data, magnet_link):
         if task_data.get(DOWNLOAD) == QBITTORRENT and qbittorrent_config:
             return download_thru_qbittorrent(magnet_link)
         elif task_data.get(DOWNLOAD) == ARIA2 and aria2_config:
+            return download_thru_aria2(magnet_link)
+        elif download == QBITTORRENT and qbittorrent_config:
+            return download_thru_qbittorrent(magnet_link)
+        elif download == ARIA2 and aria2_config:
             return download_thru_aria2(magnet_link)
         else:
             print_c("Please set download config first!", ERROR)
