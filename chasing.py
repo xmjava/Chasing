@@ -132,62 +132,65 @@ def run_drama_task(task_data):
     keywords = task_data.get(KEYWORDS)
     if keywords == None:
         keywords = ""
-    search_url = rss_base_url + quote(task_data.get(NAME) + " " + current_season_episode_str + " " + keywords.replace(',', ' '))
-    print_d(search_url)
-    # 判断是否使用代理服务器
-    proxies = None
-    if proxy != None and proxy != '':
-        print_c(f"Using proxy: {proxy}", VERBOSE)
-        proxies = {
-            'http': proxy,
-            'https': proxy
-        }
+    keywords_list = keywords.split('|') # 支持多组关键字，用|分隔，按顺序搜索，匹配到某一组就不再继续搜索下一组
+    for keywords in keywords_list:
+        search_url = rss_base_url + quote(task_data.get(NAME) + " " + current_season_episode_str + " " + keywords.replace(',', ' '))
+        print_d(search_url)
+        # 判断是否使用代理服务器
+        proxies = None
+        if proxy != None and proxy != '':
+            print_c(f"Using proxy: {proxy}", VERBOSE)
+            proxies = {
+                'http': proxy,
+                'https': proxy
+            }
 
-    # 搜索磁力链接
-    search_result = None
-    network_error_retry_count = 0
-    while search_result == None and network_error_retry_count < MAX_NETWORK_ERROR_RETRY_COUNT:
+        # 搜索磁力链接
+        search_result = None
+        network_error_retry_count = 0
+        while search_result == None and network_error_retry_count < MAX_NETWORK_ERROR_RETRY_COUNT:
+            try:
+                search_result = requests.get(search_url, headers={'User-Agent': 'Mozilla/5.0'}, proxies=proxies)
+                search_result.raise_for_status()
+            except:
+                network_error_retry_count += 1
+                if network_error_retry_count >= MAX_NETWORK_ERROR_RETRY_COUNT:
+                    print_c(f"Network error, end '{task_data.get(NAME)}' task!", ERROR)
+                    return
+                search_result = None
+                time.sleep(1) # 等待1秒重试
+
+        # 解析rss结果
         try:
-            search_result = requests.get(search_url, headers={'User-Agent': 'Mozilla/5.0'}, proxies=proxies)
-            search_result.raise_for_status()
-        except:
-            network_error_retry_count += 1
-            if network_error_retry_count >= MAX_NETWORK_ERROR_RETRY_COUNT:
-                print_c(f"Network error, end '{task_data.get(NAME)}' task!", ERROR)
+            # print(search_result.text)
+
+            DOMTree = xml.dom.minidom.parseString(search_result.text)
+            collection = DOMTree.documentElement
+            items = collection.getElementsByTagName('item')
+            if items and len(items) > 0:
+                item = items[0]
+                # print(item)
+                title = item.getElementsByTagName('title')[0].childNodes[0].data
+                magnet_link = item.getElementsByTagName('link')[0].childNodes[0].data
+                print_c(f"Found: {title}", VERBOSE)
+                print_c(f"Magnet link is: {magnet_link}", VERBOSE)
+
+                if test_mode:
+                    # 测试模式不进行下载
+                    print_c("Ignore download in test mode.", WARNING)
+                    return
+                # 将磁力链接发送到设定的下载工具
+                if download_magnet_link(task_data, magnet_link):
+                    print_c("Download started.", VERBOSE)
+                    # 添加下载成功，保存已下载进度
+                    save_drama_progress(task_data, current_episode)
+                else:
+                    print_c("Download magnet link failed!", ERROR)
                 return
-            search_result = None
-            time.sleep(1) # 等待1秒重试
-
-    # 解析rss结果
-    try:
-        # print(search_result.text)
-
-        DOMTree = xml.dom.minidom.parseString(search_result.text)
-        collection = DOMTree.documentElement
-        items = collection.getElementsByTagName('item')
-        if items and len(items) > 0:
-            item = items[0]
-            # print(item)
-            title = item.getElementsByTagName('title')[0].childNodes[0].data
-            magnet_link = item.getElementsByTagName('link')[0].childNodes[0].data
-            print_c(f"Found: {title}", VERBOSE)
-            print_c(f"Magnet link is: {magnet_link}", VERBOSE)
-
-            if test_mode:
-                # 测试模式不进行下载
-                print_c("Ignore download in test mode.", WARNING)
-                return
-            # 将磁力链接发送到设定的下载工具
-            if download_magnet_link(task_data, magnet_link):
-                print_c("Download started.", VERBOSE)
-                # 添加下载成功，保存已下载进度
-                save_drama_progress(task_data, current_episode)
             else:
-                print_c("Download magnet link failed!", ERROR)
-        else:
-            print_c("No any search result, end this task!", WARNING)
-    except:
-        print_c("Can not parse search result, end this task!", ERROR)
+                print_c("No any search result!", WARNING)
+        except:
+            print_c("Can not parse search result!", ERROR)
 
 # 获取当前应下载的集数 / 已经下载到哪一集
 def get_drama_progress(task_data):

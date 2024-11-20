@@ -38,7 +38,7 @@ dramas:
 
     - drama:
           name: Only Murders in the Building
-          keywords: 1080p,dsnp,tgx
+          keywords: 1080p,dsnp,tgx|1080p,dsnp,eztvx # 可以支持多组关键字，用|分隔，按顺序搜索，匹配到某一组就不再继续搜索下一组
           season: 4
           episodes: 10
           schedules: # 可选
