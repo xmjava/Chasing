@@ -18,10 +18,16 @@ global:
         rpc_path: jsonrpc
         secret:
 
+    keywords: # 搜索关键字模版，引用方法：<xxx>
+        dsnp: 1080p,dsnp,eztvx|1080p,dsnp,tgx|1080p,dsnp,ntb|1080p,dsnp,flux
+        amzn: 1080p,amzn,eztvx|1080p,amzn,tgx|1080p,amzn,ntb|1080p,amzn,flux
+        atvp: 1080p,atvp,eztvx|1080p,atvp,tgx
+        hmax: 1080p,hmax,eztvx|1080p,hmax,tgx
+
 dramas:
     - drama:
           name: The Penguin # 剧名，用于搜索资源，务必填对
-          keywords: 1080p,amzn,tgx # 其它搜索关键字列表，如分辨率，发布组等，可选
+          keywords: 1080p,amzn,tgx # 其它搜索关键字列表，如分辨率，发布组等，支持模版，可选
           season: 1 # 该季是第几季，数字
           episodes: 8 # 该季一共几集，数字
           schedules: # 每一集的上线日期，可以不设置
@@ -47,7 +53,7 @@ dramas:
 
     - drama:
           name: Slow Horses
-          keywords: 1080p,atvp,tgx
+          keywords: <atvp>
           season: 4
           episodes: 6
           schedules: # 可选
@@ -56,7 +62,7 @@ dramas:
 
     - drama:
           name: The Rings of Power
-          keywords: 1080p,amzn,tgx
+          keywords: <amzn>
           season: 2
           episodes: 8
           schedules: # 可选
@@ -71,7 +77,7 @@ dramas:
 
     - drama:
           name: Tulsa King
-          keywords: 1080p,amzn,tgx
+          keywords: <amzn>
           season: 2
           episodes: 10
           schedules: # 可选

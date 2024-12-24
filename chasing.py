@@ -52,6 +52,7 @@ download = None
 drama_task_list = []
 qbittorrent_config = None
 aria2_config = None
+keyword_templates = None
 
 # print文字颜色定义
 ERROR = 31
@@ -73,12 +74,14 @@ def load_config(yaml_file):
         global drama_task_list
         global qbittorrent_config
         global aria2_config
+        global keyword_templates
 
         rss_base_url = data.get(GLOBAL).get(RSS)
         proxy = data.get(GLOBAL).get(PROXY)
         download = data.get(GLOBAL).get(DOWNLOAD)
         qbittorrent_config = data.get(GLOBAL).get(QBITTORRENT)
         aria2_config = data.get(GLOBAL).get(ARIA2)
+        keyword_templates = data.get(GLOBAL).get(KEYWORDS)
         drama_task_list = data.get(DRAMAS)
         for i in range(len(drama_task_list)):
             drama = drama_task_list[i].get(DRAMA)
@@ -132,6 +135,15 @@ def run_drama_task(task_data):
     keywords = task_data.get(KEYWORDS)
     if keywords == None:
         keywords = ""
+
+    # 处理关键字模版
+    if keywords.startswith('<') and keywords.endswith('>'):    
+        keyword_template_name = keywords[1:-1]
+        keywords = keyword_templates.get(keyword_template_name)    
+        if keywords == None:
+            print_c(f"Keyword template <{keyword_template_name}> not found!", ERROR)
+            keywords = ""
+
     keywords_list = keywords.split('|') # 支持多组关键字，用|分隔，按顺序搜索，匹配到某一组就不再继续搜索下一组
     for keywords in keywords_list:
         search_url = rss_base_url + quote(task_data.get(NAME) + " " + current_season_episode_str + " " + keywords.replace(',', ' '))
