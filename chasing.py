@@ -14,14 +14,17 @@ import logging
 from logging import handlers
 import sys
 import time
+from lxml import etree
+import pickle
+import re
 
 __DEBUG_MODE__ = True
-MAX_NETWORK_ERROR_RETRY_COUNT = 3 # 网络错误最多重试3次
+MAX_NETWORK_ERROR_RETRY_COUNT = 5 # 网络错误最多重试5次
 logger = None
 
 test_mode = False
 
-# yaml键值
+# 键值
 GLOBAL = "global"
 RSS = "rss"
 PROXY = "proxy"
@@ -29,6 +32,7 @@ DRAMAS = "dramas"
 DRAMA = "drama"
 NAME = "name"
 SEASON = "season"
+EPISODE = "episode"
 EPISODES = "episodes"
 KEYWORDS = "keywords"
 SCHEDULES = "schedules"
@@ -40,11 +44,20 @@ USERNAME = "username"
 PASSWORD = "password"
 WEEK = "week"
 WEEKS_DICT = {"mon" : 0, "tue" : 1, "wed" : 2, "thu" : 3, "fri" : 4, "sat" : 5, "sun" : 6}
+DATE = "date"
+STATUS = "status"
+PENDING = "pending"
+DONE = "done"
 
+LOG_FILE = "chasing.log"
 CONFIG_FILE = "chasing.yml"
 DRAMA_SEEN_FILE = "chasing.seen"
+RECENTLY_ONLINE_DRAMAS_FILE = "chasing.calendar"
+DRAMA_DOWNLOAD_QUEUE_FILE = "chasing.queue"
 full_config_file_path = None
 full_drama_seen_file_path = None
+full_recently_online_dramas_file_path = None
+full_drama_download_queue_file_path = None
 
 rss_base_url = None
 proxy = None
@@ -53,6 +66,10 @@ drama_task_list = []
 qbittorrent_config = None
 aria2_config = None
 keyword_templates = None
+
+recently_online_dramas = []
+dramas_download_queue = []
+tv_calendar_html_cache = {}
 
 # print文字颜色定义
 ERROR = 31
@@ -90,46 +107,112 @@ def load_config(yaml_file):
     print_c("Load config file done.", VERBOSE)
 
 # 执行任务
-def run_drama_task(task_data):
+def run_task(task_data):
+    if task_data == None or task_data.get(NAME) == None:
+        print_c("Task data is wrong, end this task!", ERROR)
+        return
+
+    # 检查配置
+    if task_data.get(SEASON) == None or task_data.get(EPISODES) == None:
+        # 没有设置季或集数，将忽略其它参数，尝试自动从TV Calendar匹配剧集
+        drama_name = task_data.get(NAME).strip()
+
+        global recently_online_dramas
+        global dramas_download_queue
+
+        for i in range(1, len(recently_online_dramas)):
+            drama_data = recently_online_dramas[i]
+            # if drama_name in drama_data.get(NAME):
+            if re.search(drama_name, drama_data.get(NAME), re.IGNORECASE):
+                # 匹配到剧集
+                # 添加到下载队列
+                found = False
+                for drama_download_data in dramas_download_queue:
+                    # print(drama_download_data)
+                    if drama_download_data.get(NAME) == drama_name \
+                    and drama_download_data.get(SEASON) == drama_data.get(SEASON) \
+                    and drama_download_data.get(EPISODE) == drama_data.get(EPISODE):
+                        # 已存在队列里，跳过
+                        found = True
+                        break
+                # print(found)
+                if not found:
+                    # 添加到队列
+                    download_data = {
+                        SEASON: drama_data.get(SEASON),
+                        EPISODE: drama_data.get(EPISODE),
+                        NAME: drama_name,
+                        DATE: datetime.datetime.now().date(),
+                        STATUS: PENDING
+                    }
+                    dramas_download_queue.append(download_data)
+                    save_dramas_download_queue_from_tv_calendar()
+
+        # 从下载队列找到还未下载的进行下载    
+        for i in range(len(dramas_download_queue)):
+            drama_download_data = dramas_download_queue[i]
+            if drama_download_data.get(NAME) == drama_name \
+            and drama_download_data.get(STATUS) == PENDING:
+                # 找到待下载的剧集
+                task_data = {
+                    SEASON: drama_download_data.get(SEASON),
+                    EPISODE: drama_download_data.get(EPISODE),
+                    NAME: drama_name,
+                    KEYWORDS: task_data.get(KEYWORDS),
+                }
+                run_drama_task(task_data, from_tv_calendar=True)
+
+    else:
+        run_drama_task(task_data)
+
+# 执行剧集搜索和下载任务
+def run_drama_task(task_data, from_tv_calendar=False):
     print_c(f"========== Start task for drama: {task_data.get(NAME)} ==========", VERBOSE)
-    # 如果设置了首播时间，判断是否在首播时间后 >= start
-    now_date = datetime.datetime.now().date()
-    start_date = task_data.get(START)
-    if start_date and now_date < start_date:
-        print_c("This season hasn't started yet, end this task!", WARNING)
-        return
 
-    # 获取已下载的集数
-    episode_downloaded = get_drama_progress(task_data)
-    # 判断剧集是否已结束
-    if (episode_downloaded >= task_data.get(EPISODES)):
-        print_c("This season has ended, please remove the configuration!", WARNING)
-        return
-    current_episode = episode_downloaded + 1
-
-    # 判断是否设定了改集的上线时间
-    current_episode_str = format_episode(current_episode)
-    schedules = task_data.get(SCHEDULES)
-    if schedules:
-        is_in_episode_day = False
-        is_in_episode_week = False
-        for i in range(len(schedules)):
-            for key, value in schedules[i].items():
-                if key == current_episode_str:
-                    if now_date >= value:
-                        print_d(f"matched schedule day: {value}")
-                        is_in_episode_day = True # 匹配到上线时间，按日期
-                elif WEEK == key:
-                    weeks = str(value).split(',')
-                    for week in weeks:
-                        if now_date.weekday() == WEEKS_DICT[week]:
-                            print_d(f"matched schedule week: {value}")
-                            is_in_episode_week = True # 匹配到上线时间，按周几
-        if is_in_episode_day == False and is_in_episode_week == False:
-            print_c("Not in the validity episode date, end this task!", WARNING)
+    current_season_episode_str = ""
+    if from_tv_calendar:
+        # TV Calendar模式
+        current_season_episode_str = format_season(task_data.get(SEASON)) + format_episode(task_data.get(EPISODE))
+    else:
+        # 如果设置了首播时间，判断是否在首播时间后 >= start
+        now_date = datetime.datetime.now().date()
+        start_date = task_data.get(START)
+        if start_date and now_date < start_date:
+            print_c("This season hasn't started yet, end this task!", WARNING)
             return
+            
+        # 获取已下载的集数
+        episode_downloaded = get_drama_progress(task_data)
+        # 判断剧集是否已结束
+        if (episode_downloaded >= task_data.get(EPISODES)):
+            print_c("This season has ended, please remove the configuration!", WARNING)
+            return
+        current_episode = episode_downloaded + 1
 
-    current_season_episode_str = format_season(task_data.get(SEASON)) + current_episode_str
+        # 判断是否设定了改集的上线时间
+        current_episode_str = format_episode(current_episode)
+        schedules = task_data.get(SCHEDULES)
+        if schedules:
+            is_in_episode_day = False
+            is_in_episode_week = False
+            for i in range(len(schedules)):
+                for key, value in schedules[i].items():
+                    if key == current_episode_str:
+                        if now_date >= value:
+                            print_d(f"matched schedule day: {value}")
+                            is_in_episode_day = True # 匹配到上线时间，按日期
+                    elif WEEK == key:
+                        weeks = str(value).split(',')
+                        for week in weeks:
+                            if now_date.weekday() == WEEKS_DICT[week]:
+                                print_d(f"matched schedule week: {value}")
+                                is_in_episode_week = True # 匹配到上线时间，按周几
+            if is_in_episode_day == False and is_in_episode_week == False:
+                print_c("Not in the validity episode date, end this task!", WARNING)
+                return
+
+        current_season_episode_str = format_season(task_data.get(SEASON)) + current_episode_str
+        
     print_c(f"Searching magnet link for {task_data.get(NAME)} {current_season_episode_str}", VERBOSE)
     # 拼接搜索URL
     keywords = task_data.get(KEYWORDS)
@@ -137,16 +220,14 @@ def run_drama_task(task_data):
         keywords = ""
 
     # 处理关键字模版
-    if keywords.startswith('<') and keywords.endswith('>'):    
-        keyword_template_name = keywords[1:-1]
-        keywords = keyword_templates.get(keyword_template_name)    
-        if keywords == None:
-            print_c(f"Keyword template <{keyword_template_name}> not found!", ERROR)
-            keywords = ""
+    if keyword_templates and len(keyword_templates) > 0:
+        for key, value in keyword_templates.items():
+            keywords = keywords.replace(f"<{key}>", value)
+
 
     keywords_list = keywords.split('|') # 支持多组关键字，用|分隔，按顺序搜索，匹配到某一组就不再继续搜索下一组
     for keywords in keywords_list:
-        search_url = rss_base_url + quote(task_data.get(NAME) + " " + current_season_episode_str + " " + keywords.replace(',', ' '))
+        search_url = rss_base_url + quote(task_data.get(NAME).strip() + " " + current_season_episode_str + " " + keywords.replace(',', ' ').strip())
         print_d(search_url)
         # 判断是否使用代理服务器
         proxies = None
@@ -175,7 +256,6 @@ def run_drama_task(task_data):
         # 解析rss结果
         try:
             # print(search_result.text)
-
             DOMTree = xml.dom.minidom.parseString(search_result.text)
             collection = DOMTree.documentElement
             items = collection.getElementsByTagName('item')
@@ -195,7 +275,18 @@ def run_drama_task(task_data):
                 if download_magnet_link(task_data, magnet_link):
                     print_c("Download started.", VERBOSE)
                     # 添加下载成功，保存已下载进度
-                    save_drama_progress(task_data, current_episode)
+                    if from_tv_calendar:
+                        # TV Calendar模式，更新已下载进度
+                        for i in range(len(dramas_download_queue)):
+                            drama_download_data = dramas_download_queue[i]
+                            if drama_download_data.get(NAME) == task_data.get(NAME) \
+                            and drama_download_data.get(SEASON) == task_data.get(SEASON) \
+                            and drama_download_data.get(EPISODE) == task_data.get(EPISODE):
+                                drama_download_data[STATUS] = DONE
+                                save_dramas_download_queue_from_tv_calendar()
+                                break
+                    else:
+                        save_drama_progress(task_data, current_episode)
                 else:
                     print_c("Download magnet link failed!", ERROR)
                 return
@@ -325,6 +416,121 @@ def print_d(content):
         logger.debug(content)
         print(content)
 
+# 从文件获取保存的TV Calendar下载队列
+def get_dramas_download_queue_from_tv_calendar():
+    global dramas_download_queue
+    try:
+        dramas_download_queue = pickle.load(open(full_drama_download_queue_file_path, "rb"))
+        if dramas_download_queue and len(dramas_download_queue) > 0:
+            now_date = datetime.datetime.now().date()
+            # 清除掉7天前的项目
+            need_save = False
+            for i in reversed(range(0, len(dramas_download_queue))):
+                add_date = dramas_download_queue[i].get(DATE)
+                if now_date - add_date > datetime.timedelta(days=7):                    
+                    dramas_download_queue.pop(i)
+                    need_save = True
+            if need_save:
+                save_dramas_download_queue_from_tv_calendar()
+        else:
+            dramas_download_queue = []
+    except:
+        dramas_download_queue = []
+        pass
+    print_d(dramas_download_queue)
+
+# 保存TV Calendar下载队列到文件
+def save_dramas_download_queue_from_tv_calendar():
+    global dramas_download_queue
+    try:
+        pickle.dump(dramas_download_queue, open(full_drama_download_queue_file_path, "wb"))    
+    except:
+        print_d("Can not save drama download queue to file!")
+        pass
+
+# 从TV Calendar缓存最近3天的上线剧集
+def get_recent_online_drama_from_tv_calendar():
+    global recently_online_dramas
+    now_date = datetime.datetime.now().date()
+
+    try:
+        # 尝试从缓存文件读取
+        recently_online_dramas = pickle.load(open(full_recently_online_dramas_file_path, "rb"))
+        if recently_online_dramas and len(recently_online_dramas) > 0:  
+            if now_date == recently_online_dramas[0]:
+                print_d(recently_online_dramas)
+                return
+            # 非当天的缓存，重新从网站获取
+    except:
+        pass
+
+    # 从网站获取数据并缓存到本地文件
+    print_c("Getting online dramas from pogdesign.co.uk...", VERBOSE)
+    global tv_calendar_html_cache
+    tv_calendar_html_cache.clear()
+    recently_online_dramas.clear()
+    recently_online_dramas.append(now_date)
+    for i in range(3):
+        episode_date = now_date - datetime.timedelta(days=i)
+        online_dramas = get_today_online_drama_from_pogdesign(episode_date)
+        recently_online_dramas.extend(online_dramas)
+    
+    try:
+        pickle.dump(recently_online_dramas, open(full_recently_online_dramas_file_path, "wb"))
+    except:
+        print_d("Can not save recently online dramas to file!")
+        pass
+
+
+# 获取某日上线的剧集(数据源：https://www.pogdesign.co.uk/cat/)
+def get_today_online_drama_from_pogdesign(episode_date: datetime.date):
+    online_dramas = []
+    agent = {'User-Agent': 'Mozilla/5.0 (iPad; U; CPU OS 3_2_1 like Mac OS X; en-us) AppleWebKit / 531.21.10(KHTML, likeGecko) Mobile / 7B405'}
+    error = False
+    for i in range(3): # 尝试3次
+        try:
+            month_str = f"{episode_date.month}-{episode_date.year}"
+            # 先尝试从cache中获取网页
+            html_from_web = tv_calendar_html_cache.get(month_str, None)
+
+            if not html_from_web:
+                # 缓存中没有，从网站获取
+                calendar_data = requests.get(f"https://www.pogdesign.co.uk/cat/{month_str}", headers=agent)
+                calendar_data.raise_for_status()
+                # print(calendar_data.text)
+                html_from_web = calendar_data.text
+                # 添加到缓存中
+                tv_calendar_html_cache[month_str] = html_from_web
+
+            calendar_html = etree.HTML(html_from_web)
+            today_td_tag = calendar_html.xpath(f"//div[contains(@id,'{episode_date.day}_{episode_date.month}_{episode_date.year}')]")
+            drama_div_tags = today_td_tag[0].xpath(".//div")
+            for drama_div_tag in drama_div_tags:
+                info_tags = drama_div_tag.xpath(".//a")
+                if (info_tags and len(info_tags) > 1):
+                    drama_name = info_tags[0].text
+                    # print(drama_name)
+                    episode_str = info_tags[1].text.upper().strip()
+                    # print(episode_str)    
+                    season = int(episode_str[1:3])
+                    episode = int(episode_str[4:6])
+                    drama = {
+                        NAME: drama_name,
+                        SEASON: season,
+                        EPISODE: episode
+                    }
+                    online_dramas.append(drama)  
+            error = False
+            break
+        except:
+            time.sleep(2) # 网络错误，等待2秒后重试
+            error = True
+            continue
+    if error:
+        print_c("Can not get online dramas from pogdesign.co.uk!", ERROR)
+        online_dramas = []
+    return online_dramas
+
 # 主代码
 def main():
     # 处理命令行参数
@@ -335,13 +541,17 @@ def main():
 
     global full_config_file_path
     global full_drama_seen_file_path
+    global full_recently_online_dramas_file_path
+    global full_drama_download_queue_file_path
     # 获取脚本所在目录
     script_path = os.path.split(os.path.realpath(__file__))[0]
     full_config_file_path = script_path + "/" + CONFIG_FILE
     full_drama_seen_file_path = script_path + "/" + DRAMA_SEEN_FILE
+    full_recently_online_dramas_file_path = script_path + "/" + RECENTLY_ONLINE_DRAMAS_FILE
+    full_drama_download_queue_file_path = script_path + "/" + DRAMA_DOWNLOAD_QUEUE_FILE
 
     # 配置日志输出
-    full_logging_file_path = script_path + "/" + "chasing.log"
+    full_logging_file_path = script_path + "/" + LOG_FILE
     global logger
     logger = logging.getLogger("chasing")
     if __DEBUG_MODE__:
@@ -355,13 +565,19 @@ def main():
     time_rotating_file_handler.setFormatter(formatter)
     logger.addHandler(time_rotating_file_handler)
 
+    # 从TV Calendar获取最近3天的上线剧集
+    get_recent_online_drama_from_tv_calendar()
+    # 获取保存的TV Calendar下载队列
+    get_dramas_download_queue_from_tv_calendar()
+
     # 加载配置文件
     load_config(full_config_file_path)
     
     # 执行任务
-    for i in range(len(drama_task_list)):
-        drama_task_data = drama_task_list[i].get(DRAMA)
-        run_drama_task(drama_task_data)
+    if drama_task_list and len(drama_task_list) > 0:
+        for i in range(len(drama_task_list)):
+            drama_task_data = drama_task_list[i].get(DRAMA)
+            run_task(drama_task_data)
 
 if __name__ == "__main__":
     main()

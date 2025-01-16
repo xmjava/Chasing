@@ -25,6 +25,10 @@ global:
         hmax: 1080p,hmax,eztvx|1080p,hmax,tgx
 
 dramas:
+    - drama: # 这是最简单的使用方法，不设置季或集数，尝试自动从TV Calendar匹配剧集
+          name: Silo
+          keywords: <atvp>
+
     - drama:
           name: The Penguin # 剧名，用于搜索资源，务必填对
           keywords: 1080p,amzn,tgx # 其它搜索关键字列表，如分辨率，发布组等，支持模版，可选

@@ -6,7 +6,7 @@
 
 Python 3.9+
 
-需要安装第三方库：`PyYAML`，`requests`
+需要安装第三方库：`PyYAML`，`requests`，`lxml`
 
 ## 部署
 
@@ -33,18 +33,32 @@ Python 3.9+
 -   `global` 里是全局使用的配置，下载工具目前只支持 `qBittorrent` 和 `Aria2`
 -   `dramas` 里是剧集的设置列表
     -   搜索资源的时候会根据 `name` 和 `keywords` 组成关键字进行搜索，如果有搜索结果，只会下载第一个。
+    -   最简单的设置只需要 `name` 和 `keywords` ，脚本会自动从 https://www.pogdesign.co.uk/cat/ 查找剧集上线的日期进行下载，如果不需要更详细的设置，可以忽略后面的说明。
     -   `schedules` 有两种形式，一种是按某一集的上线日期搜索，另一种是按每周几搜索，可以减少不必要的搜索，当然 `schedules` 也可以不设置，不设置的情况下则脚本每次运行都会搜索资源。
     -   `start` 是剧集上线的日期，脚本会从这个日期开始搜索资源，如果不设置，则脚本每次运行都会搜索资源。
 
-一个简单的例子，例如要自动下载《Tulsa King》第二季 1080p 的 AMZN 版本，最简单的设置如下：
+最简答的例子，例如要自动下载《Tulsa King》，只要设置如下：
 
 ```
+    - drama:
+          name: Tulsa King          # 剧名
+          keywords: 1080p,amzn      # 1080p，AMZN版本
+
+```
+
+这样只要有新剧集上线，脚本就会自动搜索资源下载。
+
+详细设置的例子，例如要自动下载《Tulsa King》第二季 1080p 的 AMZN 版本，设置如下：
+
+```
+
     - drama:
           name: Tulsa King          # 剧名
           keywords: 1080p,amzn      # 1080p，AMZN版本
           season: 2                 # 第二季
           episodes: 10              # 第二季共有10集
           download: qbittorrent     # 使用qBittorrent下载
+
 ```
 
 这个设置将会在每次执行脚本的时候去搜索资源，直到 10 集全部下载完成。
@@ -52,8 +66,10 @@ Python 3.9+
 下载过的集数信息会保存在 `chasing.seen` 文件里，默认从第 1 集开始下载，每下载成功 1 集就会更新 `chasing.seen` 文件，例如：
 
 ```
+
 [Tulsa King]
 S02 = 2
+
 ```
 
 表示《Tulsa King》第二季已经下载了两集，下次执行将搜索第三集的资源。这个文件会自动生成，也可以手工修改，例如将 `S02 = 2` 改为 `S02 = 4`，则下次脚本执行的时候将会搜索第五集的资源。
