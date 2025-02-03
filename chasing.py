@@ -123,7 +123,7 @@ def run_task(task_data):
         for i in range(1, len(recently_online_dramas)):
             drama_data = recently_online_dramas[i]
             # if drama_name in drama_data.get(NAME):
-            if re.search(drama_name, drama_data.get(NAME), re.IGNORECASE):
+            if re.search(r'\b' + drama_name + r'\b', drama_data.get(NAME), re.IGNORECASE):
                 # 匹配到剧集
                 # 添加到下载队列
                 found = False
