@@ -224,10 +224,12 @@ def run_drama_task(task_data, from_tv_calendar=False):
         for key, value in keyword_templates.items():
             keywords = keywords.replace(f"<{key}>", value)
 
+    # 搜索时如果剧名含有特殊符号，进行转换处理：去掉冒号，将&替换成and
+    drama_name_for_search = task_data.get(NAME).strip().replace(':', '').replace('&', 'and')
 
     keywords_list = keywords.split('|') # 支持多组关键字，用|分隔，按顺序搜索，匹配到某一组就不再继续搜索下一组
     for keywords in keywords_list:
-        search_url = rss_base_url + quote(task_data.get(NAME).strip() + " " + current_season_episode_str + " " + keywords.replace(',', ' ').strip())
+        search_url = rss_base_url + quote(drama_name_for_search + " " + current_season_episode_str + " " + keywords.replace(',', ' ').strip())
         print_d(search_url)
         # 判断是否使用代理服务器
         proxies = None
