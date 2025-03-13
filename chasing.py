@@ -76,6 +76,8 @@ ERROR = 31
 VERBOSE = 32
 WARNING = 33
 
+session = requests.Session()
+
 # 加载并解析配置文件
 def load_config(yaml_file):
     print_c("Loading config file...", VERBOSE)
@@ -245,7 +247,7 @@ def run_drama_task(task_data, from_tv_calendar=False):
         network_error_retry_count = 0
         while search_result == None and network_error_retry_count < MAX_NETWORK_ERROR_RETRY_COUNT:
             try:
-                search_result = requests.get(search_url, headers={'User-Agent': 'Mozilla/5.0'}, proxies=proxies)
+                search_result = session.get(search_url, proxies=proxies, timeout=5)
                 search_result.raise_for_status()
             except:
                 network_error_retry_count += 1
@@ -487,7 +489,6 @@ def get_recent_online_drama_from_tv_calendar():
 # 获取某日上线的剧集(数据源：https://www.pogdesign.co.uk/cat/)
 def get_today_online_drama_from_pogdesign(episode_date: datetime.date):
     online_dramas = []
-    agent = {'User-Agent': 'Mozilla/5.0 (iPad; U; CPU OS 3_2_1 like Mac OS X; en-us) AppleWebKit / 531.21.10(KHTML, likeGecko) Mobile / 7B405'}
     error = False
     for i in range(3): # 尝试3次
         try:
@@ -497,7 +498,7 @@ def get_today_online_drama_from_pogdesign(episode_date: datetime.date):
 
             if not html_from_web:
                 # 缓存中没有，从网站获取
-                calendar_data = requests.get(f"https://www.pogdesign.co.uk/cat/{month_str}", headers=agent)
+                calendar_data = session.get(f"https://www.pogdesign.co.uk/cat/{month_str}", timeout=5)
                 calendar_data.raise_for_status()
                 # print(calendar_data.text)
                 html_from_web = calendar_data.text
@@ -566,6 +567,13 @@ def main():
     time_rotating_file_handler = handlers.TimedRotatingFileHandler(filename = full_logging_file_path, when = 'MIDNIGHT', backupCount = 7)
     time_rotating_file_handler.setFormatter(formatter)
     logger.addHandler(time_rotating_file_handler)
+
+    # 初始化session
+    adapter = requests.adapters.HTTPAdapter(pool_connections=10, pool_maxsize=100)
+    session.mount('http://', adapter)
+    session.mount('https://', adapter)
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'}
+    session.headers.update(headers)
 
     # 从TV Calendar获取最近3天的上线剧集
     get_recent_online_drama_from_tv_calendar()
