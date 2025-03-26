@@ -17,6 +17,7 @@ import time
 from lxml import etree
 import pickle
 import re
+import libtorrent as lt
 
 __DEBUG_MODE__ = True
 MAX_NETWORK_ERROR_RETRY_COUNT = 5 # 网络错误最多重试5次
@@ -48,6 +49,7 @@ DATE = "date"
 STATUS = "status"
 PENDING = "pending"
 DONE = "done"
+VERIFY_MAGNET = "verify_magnet"
 
 LOG_FILE = "chasing.log"
 CONFIG_FILE = "chasing.yml"
@@ -62,6 +64,7 @@ full_drama_download_queue_file_path = None
 rss_base_url = None
 proxy = None
 download = None
+verify_magnet = False
 drama_task_list = []
 qbittorrent_config = None
 aria2_config = None
@@ -90,6 +93,7 @@ def load_config(yaml_file):
         global rss_base_url
         global proxy
         global download
+        global verify_magnet
         global drama_task_list
         global qbittorrent_config
         global aria2_config
@@ -98,6 +102,7 @@ def load_config(yaml_file):
         rss_base_url = data.get(GLOBAL).get(RSS)
         proxy = data.get(GLOBAL).get(PROXY)
         download = data.get(GLOBAL).get(DOWNLOAD)
+        verify_magnet = data.get(GLOBAL).get(VERIFY_MAGNET)
         qbittorrent_config = data.get(GLOBAL).get(QBITTORRENT)
         aria2_config = data.get(GLOBAL).get(ARIA2)
         keyword_templates = data.get(GLOBAL).get(KEYWORDS)
@@ -275,6 +280,19 @@ def run_drama_task(task_data, from_tv_calendar=False):
                     # 测试模式不进行下载
                     print_c("Ignore download in test mode.", WARNING)
                     return
+                
+                # 检查磁力链接的内容
+                if verify_magnet:
+                    try:
+                        print_c("Checking magnet link content...", VERBOSE)
+                        if not check_magnet_content(magnet_link):
+                            print_c("Magnet link content is invalid, end this task!", ERROR)
+                            return
+                        print_c("Magnet link content is valid.", VERBOSE)
+                    except:
+                        print_c("Checking magnet link content failed, end this task!", ERROR)
+                        return
+
                 # 将磁力链接发送到设定的下载工具
                 if download_magnet_link(task_data, magnet_link):
                     print_c("Download started.", VERBOSE)
@@ -533,6 +551,31 @@ def get_today_online_drama_from_pogdesign(episode_date: datetime.date):
         print_c("Can not get online dramas from pogdesign.co.uk!", ERROR)
         online_dramas = []
     return online_dramas
+
+# 尝试检查磁力链接里的文件是否为MKV或MP4格式，避免下载无效文件
+def check_magnet_content(magnet_link: str):
+    session = lt.session()
+    atp = lt.parse_magnet_uri(magnet_link)
+    atp.save_path = "./"
+    atp.flags |= lt.torrent_flags.upload_mode
+    handle = session.add_torrent(atp)
+
+    MAX_WAIT_TIMES = 60
+    wait_times = 0
+    while(not handle.status().has_metadata):
+        wait_times += 1
+        if wait_times > MAX_WAIT_TIMES:
+            raise Exception("Wait for metadata timeout")
+        time.sleep(1)
+
+    torrent_info = handle.status().torrent_file
+    # print(torrent_info.name())
+    for i in range(torrent_info.files().num_files()):
+        path = torrent_info.files().file_path(i)
+        # print(path)
+        if path.lower().endswith(".mkv") or path.lower().endswith(".mp4"):
+            return True
+    return False
 
 # 主代码
 def main():
