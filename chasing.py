@@ -5,7 +5,7 @@ import yaml
 import configparser
 import datetime
 from zoneinfo import ZoneInfo
-from urllib.parse import quote
+from urllib.parse import quote, unquote
 import requests
 import xml.dom.minidom
 import json
@@ -27,7 +27,7 @@ test_mode = False
 
 # 键值
 GLOBAL = "global"
-RSS = "rss"
+# RSS = "rss"
 PROXY = "proxy"
 DRAMAS = "dramas"
 DRAMA = "drama"
@@ -61,7 +61,7 @@ full_drama_seen_file_path = None
 full_recently_online_dramas_file_path = None
 full_drama_download_queue_file_path = None
 
-rss_base_url = None
+# rss_base_url = None
 proxy = None
 download = None
 verify_magnet = False
@@ -73,6 +73,12 @@ keyword_templates = None
 recently_online_dramas = []
 dramas_download_queue = []
 tv_calendar_html_cache = {}
+
+# 用于搜索磁力链接的函数列表，对应不同网站，按优先顺序
+search_magnet_funcs = [\
+    "search_from_bt4gprx", \
+    "search_from_uindex", \
+    "search_from_thepiratebay"]
 
 # print文字颜色定义
 ERROR = 31
@@ -90,7 +96,7 @@ def load_config(yaml_file):
         data = yaml.load(content, Loader=yaml.FullLoader)
         # print(data)
 
-        global rss_base_url
+        # global rss_base_url
         global proxy
         global download
         global verify_magnet
@@ -99,7 +105,7 @@ def load_config(yaml_file):
         global aria2_config
         global keyword_templates
 
-        rss_base_url = data.get(GLOBAL).get(RSS)
+        # rss_base_url = data.get(GLOBAL).get(RSS)
         proxy = data.get(GLOBAL).get(PROXY)
         download = data.get(GLOBAL).get(DOWNLOAD)
         verify_magnet = data.get(GLOBAL).get(VERIFY_MAGNET)
@@ -236,86 +242,259 @@ def run_drama_task(task_data, from_tv_calendar=False):
 
     keywords_list = keywords.split('|') # 支持多组关键字，用|分隔，按顺序搜索，匹配到某一组就不再继续搜索下一组
     for keywords in keywords_list:
-        search_url = rss_base_url + quote(drama_name_for_search + " " + current_season_episode_str + " " + keywords.replace(',', ' ').strip())
-        print_d(search_url)
-        # 判断是否使用代理服务器
-        proxies = None
-        if proxy != None and proxy != '':
-            print_c(f"Using proxy: {proxy}", VERBOSE)
-            proxies = {
-                'http': proxy,
-                'https': proxy
-            }
+        network_error = False
+        title = ""
+        magnet_link = ""
+        # 依次尝试搜索网站
+        for search_magnet_func in search_magnet_funcs:
+            search_function = getattr(sys.modules[__name__], search_magnet_func)
+            network_error, title, magnet_link = search_function(drama_name_for_search, current_season_episode_str, keywords, proxy)
+            if not network_error and len(magnet_link) > 0:
+                break
+            
+        if network_error:
+            print_c(f"Network error, end '{task_data.get(NAME)}' task!", ERROR)
+            return
+        
+        if magnet_link and len(magnet_link) > 0:
+            if test_mode:
+                # 测试模式不进行下载
+                print_c("Ignore download in test mode.", WARNING)
+                return
 
-        # 搜索磁力链接
-        search_result = None
-        network_error_retry_count = 0
-        while search_result == None and network_error_retry_count < MAX_NETWORK_ERROR_RETRY_COUNT:
-            try:
-                search_result = session.get(search_url, proxies=proxies, timeout=5)
-                search_result.raise_for_status()
-            except:
-                network_error_retry_count += 1
-                if network_error_retry_count >= MAX_NETWORK_ERROR_RETRY_COUNT:
-                    print_c(f"Network error, end '{task_data.get(NAME)}' task!", ERROR)
-                    return
-                search_result = None
-                time.sleep(1) # 等待1秒重试
-
-        # 解析rss结果
-        try:
-            # print(search_result.text)
-            DOMTree = xml.dom.minidom.parseString(search_result.text)
-            collection = DOMTree.documentElement
-            items = collection.getElementsByTagName('item')
-            if items and len(items) > 0:
-                item = items[0]
-                # print(item)
-                title = item.getElementsByTagName('title')[0].childNodes[0].data
-                magnet_link = item.getElementsByTagName('link')[0].childNodes[0].data
-                print_c(f"Found: {title}", VERBOSE)
-                print_c(f"Magnet link is: {magnet_link}", VERBOSE)
-
-                if test_mode:
-                    # 测试模式不进行下载
-                    print_c("Ignore download in test mode.", WARNING)
+            # 检查磁力链接的内容
+            if verify_magnet:
+                try:
+                    print_c("Checking magnet link content...", VERBOSE)
+                    if not check_magnet_content(magnet_link):
+                        print_c("Magnet link content is invalid, end this task!", ERROR)
+                        return
+                    print_c("Magnet link content is valid.", VERBOSE)
+                except:
+                    print_c("Checking magnet link content failed, end this task!", ERROR)
                     return
                 
-                # 检查磁力链接的内容
-                if verify_magnet:
-                    try:
-                        print_c("Checking magnet link content...", VERBOSE)
-                        if not check_magnet_content(magnet_link):
-                            print_c("Magnet link content is invalid, end this task!", ERROR)
-                            return
-                        print_c("Magnet link content is valid.", VERBOSE)
-                    except:
-                        print_c("Checking magnet link content failed, end this task!", ERROR)
-                        return
-
-                # 将磁力链接发送到设定的下载工具
-                if download_magnet_link(task_data, magnet_link):
-                    print_c("Download started.", VERBOSE)
-                    # 添加下载成功，保存已下载进度
-                    if from_tv_calendar:
-                        # TV Calendar模式，更新已下载进度
-                        for i in range(len(dramas_download_queue)):
-                            drama_download_data = dramas_download_queue[i]
-                            if drama_download_data.get(NAME) == task_data.get(NAME) \
-                            and drama_download_data.get(SEASON) == task_data.get(SEASON) \
-                            and drama_download_data.get(EPISODE) == task_data.get(EPISODE):
-                                drama_download_data[STATUS] = DONE
-                                save_dramas_download_queue_from_tv_calendar()
-                                break
-                    else:
-                        save_drama_progress(task_data, current_episode)
+            # 将磁力链接发送到设定的下载工具
+            if download_magnet_link(task_data, magnet_link):
+                # print_c("Download started.", VERBOSE)
+                print_c(f"Downloading {title}", VERBOSE)
+                # 添加下载成功，保存已下载进度
+                if from_tv_calendar:
+                    # TV Calendar模式，更新已下载进度
+                    for i in range(len(dramas_download_queue)):
+                        drama_download_data = dramas_download_queue[i]
+                        if drama_download_data.get(NAME) == task_data.get(NAME) \
+                        and drama_download_data.get(SEASON) == task_data.get(SEASON) \
+                        and drama_download_data.get(EPISODE) == task_data.get(EPISODE):
+                            drama_download_data[STATUS] = DONE
+                            save_dramas_download_queue_from_tv_calendar()
+                            break
                 else:
-                    print_c("Download magnet link failed!", ERROR)
-                return
+                    save_drama_progress(task_data, current_episode)
             else:
-                print_c("No any search result!", WARNING)
+                print_c("Download magnet link failed!", ERROR)
+            return
+
+# 从https://bt4gprx.com/搜索磁力链接
+def search_from_bt4gprx(drama_name, episode, keywords, proxy):
+    print_c(f"Searching from bt4gprx.com for keywords:{keywords}...", VERBOSE)
+    network_error = False
+    title = ""
+    magnet_link = ""
+
+    search_url = "https://bt4gprx.com/search?page=rss&orderby=seeders&q=" + quote(drama_name + " " + episode + " " + keywords.replace(',', ' ').strip())
+    print_d(search_url)
+    # 判断是否使用代理服务器
+    proxies = None
+    if proxy != None and proxy != '':
+        print_c(f"Using proxy: {proxy}", VERBOSE)
+        proxies = {
+            'http': proxy,
+            'https': proxy
+        }
+
+    # 搜索磁力链接
+    search_result = None
+    network_error_retry_count = 0
+    while search_result == None and network_error_retry_count < MAX_NETWORK_ERROR_RETRY_COUNT:
+        try:
+            search_result = session.get(search_url, proxies=proxies, timeout=5)
+            search_result.raise_for_status()
         except:
-            print_c("Can not parse search result!", ERROR)
+            network_error_retry_count += 1
+            if network_error_retry_count >= MAX_NETWORK_ERROR_RETRY_COUNT:
+                network_error = True
+                title = ""
+                magnet_link = ""
+                return network_error, title, magnet_link
+            search_result = None
+            time.sleep(1) # 等待1秒重试
+
+    # 解析rss结果
+    try:
+        # print(search_result.text)
+        DOMTree = xml.dom.minidom.parseString(search_result.text)
+        collection = DOMTree.documentElement
+        items = collection.getElementsByTagName('item')
+        if items and len(items) > 0:
+            item = items[0]
+            # print(item)
+            title = item.getElementsByTagName('title')[0].childNodes[0].data
+            magnet_link = item.getElementsByTagName('link')[0].childNodes[0].data
+            print_c(f"Found: {title}", VERBOSE)
+            print_c(f"Magnet link is: {magnet_link}", VERBOSE)
+        else:
+            print_c("No any search result!", WARNING)
+    except:
+        network_error = True
+        title = ""
+        magnet_link = ""        
+        print_c("Can not parse search result!", ERROR)
+ 
+    return network_error, title, magnet_link
+
+# 从https://uindex.org/搜索磁力链接
+def search_from_uindex(drama_name, episode, keywords, proxy):
+    print_c(f"Searching from uindex.org for keywords:{keywords}...", VERBOSE)
+    network_error = False
+    title = ""
+    magnet_link = ""
+
+    search_url = "https://uindex.org/search.php?sort=seeders&order=DESC&search=" + drama_name.replace(' ', '+') + "+" + episode
+    print_d(search_url)
+    # 判断是否使用代理服务器
+    proxies = None
+    if proxy != None and proxy != '':
+        print_c(f"Using proxy: {proxy}", VERBOSE)
+        proxies = {
+            'http': proxy,
+            'https': proxy
+        }
+
+    # 搜索磁力链接
+    search_result = None
+    network_error_retry_count = 0
+    while search_result == None and network_error_retry_count < MAX_NETWORK_ERROR_RETRY_COUNT:
+        try:
+            search_result = session.get(search_url, proxies=proxies, timeout=5)
+            search_result.raise_for_status()
+        except:
+            network_error_retry_count += 1
+            if network_error_retry_count >= MAX_NETWORK_ERROR_RETRY_COUNT:
+                network_error = True
+                title = ""
+                magnet_link = ""                
+                return network_error, title, magnet_link
+            search_result = None
+            time.sleep(1) # 等待1秒重试
+
+    # 解析网页结果
+    keywords_list = keywords.split(',')
+    try:
+        html = etree.HTML(search_result.text)
+        tbody_tags = html.xpath('//table[@class="maintable"]/tbody')
+        if tbody_tags and len(tbody_tags) > 0:
+            tbody_tag = tbody_tags[0]
+            tr_tags = tbody_tag.xpath('tr')
+            if tr_tags and len(tr_tags) > 0:
+                for tr_tag in tr_tags:
+                    title = tr_tag.xpath('td[2]/a[2]/text()')[0]
+                    magnet_link = tr_tag.xpath('td[2]/a[1]/@href')[0]
+                    # title可能会因为太长被截断，导致无法正确匹配关键字，这里从magnet_link中提取title
+                    magnet_link_parts = magnet_link.split('&')
+                    for magnet_link_part in magnet_link_parts:
+                        if magnet_link_part.startswith('dn='):
+                            title = unquote(magnet_link_part[3:]).replace('+',' ')
+
+                    # 关键字匹配
+                    all_matched = True
+                    for keyword in keywords_list:
+                        if keyword.lower() not in title.lower():
+                            all_matched = False
+                            break
+                    if all_matched:
+                        print_c(f"Found: {title}", VERBOSE)
+                        print_c(f"Magnet link is: {magnet_link}", VERBOSE)
+                        break
+                    else:
+                        title = ""
+                        magnet_link = ""
+            if len(magnet_link) == 0:
+                print_c("No any search result!", WARNING)
+    except:
+        network_error = True
+        title = ""
+        magnet_link = ""        
+        print_c("Can not parse search result!", ERROR)
+
+    return network_error, title, magnet_link
+
+# 从https://thepiratebay.org/搜索磁力链接
+def search_from_thepiratebay(drama_name, episode, keywords, proxy):
+    print_c(f"Searching from thepiratebay.org for keywords:{keywords}...", VERBOSE)
+    network_error = False
+    title = ""
+    magnet_link = ""
+
+    # 这个站会把过长的name截断，导致关键字无法匹配完整name而搜索不到结果，暂无好的解决方案
+    search_url = "https://apibay.org/q.php?q=" + quote(drama_name.replace(' ', '+') + "+" + episode + "+" + keywords.replace(',', '+').strip())
+    print_d(search_url)
+    # 判断是否使用代理服务器
+    proxies = None
+    if proxy != None and proxy != '':
+        print_c(f"Using proxy: {proxy}", VERBOSE)
+        proxies = {
+            'http': proxy,
+            'https': proxy
+        }
+
+    # 搜索磁力链接
+    search_result = None
+    network_error_retry_count = 0
+    while search_result == None and network_error_retry_count < MAX_NETWORK_ERROR_RETRY_COUNT:
+        try:
+            search_result = session.get(search_url, proxies=proxies, timeout=5)
+            search_result.raise_for_status()
+        except:
+            network_error_retry_count += 1
+            if network_error_retry_count >= MAX_NETWORK_ERROR_RETRY_COUNT:
+                network_error = True
+                title = ""
+                magnet_link = ""                
+                return network_error, title, magnet_link
+            search_result = None
+            time.sleep(1) # 等待1秒重试
+
+    # 解析json结果
+    # print(search_result.text)
+    try:
+        result_data = json.loads(search_result.text)
+        if result_data and len(result_data) > 0 and "0" != result_data[0].get('id'):
+            sorted_data = sorted(result_data, key=lambda x: int(x.get('seeders')), reverse=True)
+            title = sorted_data[0].get('name')
+            info_hash = sorted_data[0].get('info_hash')
+            tracker = "&tr=" + quote("udp://tracker.opentrackr.org:1337")
+            tracker += "&tr=" + quote("udp://open.stealth.si:80/announce")
+            tracker += "&tr=" + quote("udp://tracker.torrent.eu.org:451/announce")
+            tracker += "&tr=" + quote("udp://tracker.bittor.pw:1337/announce")
+            tracker += "&tr=" + quote("udp://public.popcorn-tracker.org:6969/announce")
+            tracker += "&tr=" + quote("udp://tracker.dler.org:6969/announce")
+            tracker += "&tr=" + quote("udp://exodus.desync.com:6969")
+            tracker += "&tr=" + quote("udp://open.demonii.com:1337/announce")
+            
+            magnet_link = f"magnet:?xt=urn:btih:{info_hash}&dn={quote(title)}{tracker}"
+            print_c(f"Found: {title}", VERBOSE)
+            print_c(f"Magnet link is: {magnet_link}", VERBOSE)
+        else:
+            print_c("No any search result!", WARNING)
+    except:
+        network_error = True
+        title = ""
+        magnet_link = ""        
+        print_c("Can not parse search result!", ERROR)
+
+    return network_error, title, magnet_link
+           
 
 # 获取当前应下载的集数 / 已经下载到哪一集
 def get_drama_progress(task_data):

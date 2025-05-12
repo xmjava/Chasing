@@ -1,11 +1,10 @@
 # Chasing配置文件
 
 global:
-    rss: https://bt4gprx.com/search?page=rss&q= # 搜索资源的rss站
     proxy: http://127.0.0.1:8118 # 使用http/https代理，可选
     download: qbittorrent # 默认使用什么工具下载，支持qBittorrent和Aria2
     verify_magnet: ture # 是否验证磁力链接内容
-    
+
     qbittorrent: # 访问qBittorrent的设置，用于下载磁力链接，不支持https
         host: localhost
         port: 9080
