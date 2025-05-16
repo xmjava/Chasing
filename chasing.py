@@ -360,7 +360,7 @@ def search_from_uindex(drama_name, episode, keywords, proxy):
     title = ""
     magnet_link = ""
 
-    search_url = "https://uindex.org/search.php?sort=seeders&order=DESC&search=" + drama_name.replace(' ', '+') + "+" + episode
+    search_url = "https://uindex.org/search.php?c=0&sort=seeders&order=DESC&search=" + drama_name.replace(' ', '+') + "+" + episode
     print_d(search_url)
     # 判断是否使用代理服务器
     proxies = None
@@ -398,6 +398,8 @@ def search_from_uindex(drama_name, episode, keywords, proxy):
             tr_tags = tbody_tag.xpath('tr')
             if tr_tags and len(tr_tags) > 0:
                 for tr_tag in tr_tags:
+                    if 0 == int(tr_tag.xpath('count(td/a)')):
+                        continue
                     title = tr_tag.xpath('td[2]/a[2]/text()')[0]
                     magnet_link = tr_tag.xpath('td[2]/a[1]/@href')[0]
                     # title可能会因为太长被截断，导致无法正确匹配关键字，这里从magnet_link中提取title
