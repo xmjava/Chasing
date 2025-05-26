@@ -250,6 +250,19 @@ def run_drama_task(task_data, from_tv_calendar=False):
             search_function = getattr(sys.modules[__name__], search_magnet_func)
             network_error, title, magnet_link = search_function(drama_name_for_search, current_season_episode_str, keywords, proxy)
             if not network_error and len(magnet_link) > 0:
+                # 检查磁力链接的内容
+                if verify_magnet:
+                    try:
+                        print_c("Checking magnet link content...", VERBOSE)
+                        if not check_magnet_content(magnet_link):
+                            magnet_link = ""
+                            print_c("Magnet link content is invalid!", ERROR)
+                            continue
+                        print_c("Magnet link content is valid.", VERBOSE)
+                    except:
+                        magnet_link = ""
+                        print_c("Checking magnet link content failed!", ERROR)
+                        continue                
                 break
             
         if network_error:
@@ -261,18 +274,6 @@ def run_drama_task(task_data, from_tv_calendar=False):
                 # 测试模式不进行下载
                 print_c("Ignore download in test mode.", WARNING)
                 return
-
-            # 检查磁力链接的内容
-            if verify_magnet:
-                try:
-                    print_c("Checking magnet link content...", VERBOSE)
-                    if not check_magnet_content(magnet_link):
-                        print_c("Magnet link content is invalid, end this task!", ERROR)
-                        return
-                    print_c("Magnet link content is valid.", VERBOSE)
-                except:
-                    print_c("Checking magnet link content failed, end this task!", ERROR)
-                    return
                 
             # 将磁力链接发送到设定的下载工具
             if download_magnet_link(task_data, magnet_link):
