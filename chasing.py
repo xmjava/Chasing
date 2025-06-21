@@ -232,10 +232,24 @@ def run_drama_task(task_data, from_tv_calendar=False):
     if keywords == None:
         keywords = ""
 
-    # 处理关键字模版
-    if keyword_templates and len(keyword_templates) > 0:
-        for key, value in keyword_templates.items():
-            keywords = keywords.replace(f"<{key}>", value)
+    if len(keywords) == 0:
+        # 处理默认关键字
+        if keyword_templates and len(keyword_templates) > 0:
+            for key, value in keyword_templates.items():
+                if key.lower() == "default":
+                    keywords = value
+                    break
+    else:
+        # 处理关键字模版
+        if keyword_templates and len(keyword_templates) > 0:
+            for key, value in keyword_templates.items():
+                keywords = keywords.replace(f"<{key}>", value)
+    # if keywords.startswith('<') and keywords.endswith('>'):    
+    #     keyword_template_name = keywords[1:-1]
+    #     keywords = keyword_templates.get(keyword_template_name)    
+    #     if keywords == None:
+    #         print_c(f"Keyword template <{keyword_template_name}> not found!", ERROR)
+    #         keywords = ""
 
     # 搜索时如果剧名含有特殊符号，进行转换处理：去掉冒号，将&替换成and
     drama_name_for_search = task_data.get(NAME).strip().replace(':', '').replace('&', 'and')

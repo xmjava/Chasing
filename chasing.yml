@@ -19,6 +19,7 @@ global:
         secret:
 
     keywords: # 搜索关键字模版，引用方法：<xxx>
+        default: 1080p,eztvx|1080p,tgx|1080p,ntb|1080p,flux # 如果设置了default关键字模版，没有设置keywords的情况下将使用该模版搜索
         dsnp: 1080p,dsnp,eztvx|1080p,dsnp,tgx|1080p,dsnp,ntb|1080p,dsnp,flux
         amzn: 1080p,amzn,eztvx|1080p,amzn,tgx|1080p,amzn,ntb|1080p,amzn,flux
         atvp: 1080p,atvp,eztvx|1080p,atvp,tgx
@@ -96,3 +97,6 @@ dramas:
               - E09: 2024-11-10
               - E10: 2024-11-17
           start: 2024-09-15
+
+    - drama:
+          name: Poker Face
