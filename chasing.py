@@ -161,7 +161,8 @@ def run_task(task_data):
                     dramas_download_queue.append(download_data)
                     save_dramas_download_queue_from_tv_calendar()
 
-        # 从下载队列找到还未下载的进行下载    
+        # 从下载队列找到还未下载的进行下载   
+        predict_download_data = None
         for i in range(len(dramas_download_queue)):
             drama_download_data = dramas_download_queue[i]
             if drama_download_data.get(NAME) == drama_name \
@@ -174,6 +175,45 @@ def run_task(task_data):
                     KEYWORDS: task_data.get(KEYWORDS),
                 }
                 run_drama_task(task_data, from_tv_calendar=True)
+
+                # 若下载成功，有的剧集会一次性上线，尝试下载后面的剧集
+                drama_download_data = dramas_download_queue[i]
+                if drama_download_data.get(STATUS) == DONE:
+                    predict_download_data = {
+                        SEASON: drama_download_data.get(SEASON),
+                        EPISODE: drama_download_data.get(EPISODE),
+                    }
+
+        # 尝试下载后面的剧集
+        if predict_download_data:
+            for index in range(1, 10):
+                predicting_episode = predict_download_data.get(EPISODE) + index
+                print_c(f"Predicting download for {drama_name} {format_season(predict_download_data.get(SEASON))}{format_episode(predicting_episode)}", VERBOSE)
+                download_data = {
+                    SEASON: predict_download_data.get(SEASON),
+                    EPISODE: predicting_episode,
+                    NAME: drama_name,
+                    DATE: datetime.datetime.now().date(),
+                    STATUS: PENDING
+                }        
+                dramas_download_queue.insert(0, download_data)     
+
+                task_data = {
+                    SEASON: predict_download_data.get(SEASON),
+                    EPISODE: predicting_episode,
+                    NAME: drama_name,
+                    KEYWORDS: task_data.get(KEYWORDS),
+                }
+                run_drama_task(task_data, from_tv_calendar=True)
+                download_data = dramas_download_queue[0]
+                if download_data.get(STATUS) == PENDING:
+                    # 下载失败，删除该记录，结束尝试
+                    print_c("Not found! Stop predicting.", VERBOSE)
+                    dramas_download_queue.remove(0)
+                    break
+                else:
+                    # 下载成功，更新已下载集数
+                    save_dramas_download_queue_from_tv_calendar()
 
     else:
         run_drama_task(task_data)
